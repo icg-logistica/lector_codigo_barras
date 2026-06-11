@@ -6,3 +6,5 @@ pyzbar>=0.1.9
 streamlit-option-menu>=0.3.6
 dnspython>=2.4.0
 streamlit-js-eval>=0.1.7
+cryptography>=41.0.0
+requests>=2.28.0

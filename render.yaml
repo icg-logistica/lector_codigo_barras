@@ -2,11 +2,11 @@ services:
   - type: web
     name: lector-codigo-barras-icg
     runtime: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: apt-get install -y libzbar0 && pip install --upgrade pip && pip install --only-binary=cryptography cryptography && pip install -r requirements.txt
     startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
     envVars:
       - key: MONGODB_URI
-        sync: false          # se ingresa manualmente en el dashboard de Render
+        sync: false
       - key: DATABASE_NAME
         value: lector_barcode
       - key: COLLECTION_NAME
