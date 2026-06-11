@@ -1,0 +1,8 @@
+streamlit>=1.28.0
+pymongo>=4.6.0
+python-dotenv>=1.0.0
+Pillow>=10.0.0
+pyzbar>=0.1.9
+streamlit-option-menu>=0.3.6
+dnspython>=2.4.0
+streamlit-js-eval>=0.1.7

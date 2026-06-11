@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Lector de Código de Barras</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: transparent;
+      padding: 4px;
+      overflow-x: hidden;
+    }
+
+    #scanner-wrap {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,.12);
+      overflow: hidden;
+      width: 100%;
+      max-width: 560px;
+      margin: 0 auto;
+    }
+
+    /* ── Visor de cámara ── */
+    #video-box {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      background: #000;
+      overflow: hidden;
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    /* Línea de escaneo animada */
+    #scan-line {
+      position: absolute;
+      left: 12%;
+      width: 76%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, #ef4444, transparent);
+      animation: sweep 2.2s ease-in-out infinite;
+      pointer-events: none;
+    }
+    @keyframes sweep {
+      0%   { top: 12%; opacity: 0; }
+      10%  { opacity: 1; }
+      90%  { opacity: 1; }
+      100% { top: 88%; opacity: 0; }
+    }
+
+    /* Marco de esquinas */
+    .corner {
+      position: absolute;
+      width: 28px;
+      height: 28px;
+      border-color: #22c55e;
+      border-style: solid;
+      pointer-events: none;
+    }
+    .tl { top: 8%; left: 8%;  border-width: 3px 0 0 3px; border-radius: 4px 0 0 0; }
+    .tr { top: 8%; right: 8%; border-width: 3px 3px 0 0; border-radius: 0 4px 0 0; }
+    .bl { bottom: 8%; left: 8%;  border-width: 0 0 3px 3px; border-radius: 0 0 0 4px; }
+    .br { bottom: 8%; right: 8%; border-width: 0 3px 3px 0; border-radius: 0 0 4px 0; }
+
+    /* Overlay de éxito */
+    #success-flash {
+      position: absolute;
+      inset: 0;
+      background: rgba(34,197,94,.25);
+      display: none;
+      pointer-events: none;
+      animation: flash .35s ease-out;
+    }
+    @keyframes flash { from { opacity: 1; } to { opacity: 0; } }
+
+    /* ── Panel de controles ── */
+    #controls {
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 7px;
+      font-size: 13px;
+      background: #f8fafc;
+      color: #1e293b;
+      cursor: pointer;
+    }
+    select:focus { outline: 2px solid #2471a3; }
+
+    #status-bar {
+      padding: 9px 12px;
+      border-radius: 7px;
+      font-size: 13.5px;
+      font-weight: 500;
+      text-align: center;
+      transition: background .3s, color .3s;
+    }
+    .s-scanning { background: #dbeafe; color: #1e3a8a; }
+    .s-detected { background: #d1fae5; color: #065f46; }
+    .s-error    { background: #fee2e2; color: #7f1d1d; }
+    .s-paused   { background: #fef3c7; color: #78350f; }
+
+    /* Resultado */
+    #result-card {
+      background: #f0fdf4;
+      border: 1px solid #86efac;
+      border-radius: 8px;
+      padding: 11px 14px;
+      display: none;
+    }
+    #result-card .rc-label { font-size: 11px; color: #64748b; margin-bottom: 2px; }
+    #result-card .rc-code  { font-size: 15px; font-weight: 700; color: #14532d; word-break: break-all; }
+    #result-card .rc-type  { font-size: 12px; color: #4b7c5a; margin-top: 3px; }
+
+    /* Botones */
+    #btn-row { display: flex; gap: 8px; }
+    button {
+      flex: 1;
+      padding: 10px 6px;
+      border: none;
+      border-radius: 8px;
+      font-size: 13.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: filter .18s, transform .1s;
+    }
+    button:hover  { filter: brightness(1.08); }
+    button:active { transform: scale(.97); }
+
+    #btn-scan    { background: #2471a3; color: #fff; }
+    #btn-confirm { background: #16a34a; color: #fff; display: none; }
+
+    #err-msg {
+      font-size: 12.5px;
+      color: #dc2626;
+      background: #fee2e2;
+      border-radius: 6px;
+      padding: 8px 10px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<div id="scanner-wrap">
+  <!-- Visor -->
+  <div id="video-box">
+    <video id="video" autoplay playsinline muted></video>
+    <div id="scan-line"></div>
+    <div class="corner tl"></div>
+    <div class="corner tr"></div>
+    <div class="corner bl"></div>
+    <div class="corner br"></div>
+    <div id="success-flash"></div>
+  </div>
+
+  <!-- Controles -->
+  <div id="controls">
+    <select id="cam-select" title="Seleccionar cámara"></select>
+    <div id="status-bar" class="s-scanning">⏳ Iniciando cámara…</div>
+    <div id="result-card">
+      <div class="rc-label">Código detectado:</div>
+      <div class="rc-code" id="rc-code-val">—</div>
+      <div class="rc-type" id="rc-type-val"></div>
+    </div>
+    <div id="err-msg"></div>
+    <div id="btn-row">
+      <button id="btn-scan" onclick="restartScan()">🔄 Reiniciar escáner</button>
+      <button id="btn-confirm" onclick="confirmBarcode()">✅ Confirmar código</button>
+    </div>
+  </div>
+</div>
+
+<!-- ZXing browser barcode reader -->
+<script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
+<script>
+// ══════════════════════════════════════════════════════════
+//  Comunicación con Streamlit via localStorage del padre
+// ══════════════════════════════════════════════════════════
+const LS_KEY = "icg_scanner_barcode";
+
+const Streamlit = {
+  _ready: false,
+  // Escribe el código en el localStorage de la página Streamlit padre
+  setComponentValue(value) {
+    try {
+      window.parent.localStorage.setItem(LS_KEY, value);
+    } catch(e) {
+      // Fallback: postMessage (puede no funcionar sin declare_component)
+      window.parent.postMessage({ type: "streamlit:setComponentValue", value }, "*");
+    }
+  },
+  setFrameHeight(h) {
+    window.parent.postMessage({ type: "streamlit:setFrameHeight", height: h }, "*");
+  },
+  ready() {
+    if (this._ready) return;
+    this._ready = true;
+    window.parent.postMessage({ type: "streamlit:componentReady", apiVersion: 1 }, "*");
+  },
+};
+
+// Ajustar altura del iframe al contenido
+function syncHeight() {
+  Streamlit.setFrameHeight(document.getElementById("scanner-wrap").scrollHeight + 10);
+}
+
+// ══════════════════════════════════════════════════════════
+//  Estado del escáner
+// ══════════════════════════════════════════════════════════
+let codeReader   = null;
+let detectedCode = null;
+let detectedFmt  = null;
+let scanning     = false;
+
+// ══════════════════════════════════════════════════════════
+//  Inicialización de cámaras
+// ══════════════════════════════════════════════════════════
+async function initCameras() {
+  const sel = document.getElementById("cam-select");
+  try {
+    // Pedir permiso primero para obtener labels
+    await navigator.mediaDevices.getUserMedia({ video: true });
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const cams = devices.filter(d => d.kind === "videoinput");
+
+    if (!cams.length) { showError("No se encontraron cámaras disponibles."); return; }
+
+    sel.innerHTML = "";
+    let preferredId = null;
+    cams.forEach((d, i) => {
+      const opt = document.createElement("option");
+      opt.value = d.deviceId;
+      opt.textContent = d.label || `Cámara ${i + 1}`;
+      // Preferir cámara trasera en móviles
+      const lbl = d.label.toLowerCase();
+      if (lbl.includes("back") || lbl.includes("trasera") || lbl.includes("environment")) {
+        opt.selected = true;
+        preferredId = d.deviceId;
+      }
+      sel.appendChild(opt);
+    });
+    if (!preferredId) {
+      // En móviles la trasera suele ser la última
+      sel.value = cams[cams.length - 1].deviceId;
+    }
+
+    sel.addEventListener("change", restartScan);
+    await startScan();
+  } catch (err) {
+    showError("No se pudo acceder a la cámara: " + err.message);
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  Escaneo
+// ══════════════════════════════════════════════════════════
+async function startScan() {
+  detectedCode = null;
+  detectedFmt  = null;
+  scanning     = true;
+
+  document.getElementById("result-card").style.display = "none";
+  document.getElementById("btn-confirm").style.display = "none";
+  document.getElementById("err-msg").style.display     = "none";
+  setStatus("🔍 Buscando código de barras…", "s-scanning");
+
+  if (codeReader) { try { codeReader.reset(); } catch(_){} }
+
+  codeReader = new ZXing.BrowserMultiFormatReader(null, {
+    delayBetweenScanAttempts: 100,
+  });
+
+  const deviceId = document.getElementById("cam-select").value || undefined;
+
+  try {
+    await codeReader.decodeFromVideoDevice(deviceId, "video", (result, err) => {
+      if (result) onDetected(result);
+      if (err && !(err instanceof ZXing.NotFoundException)) {
+        console.warn("ZXing scan error:", err);
+      }
+    });
+  } catch (err) {
+    showError("Error al iniciar el escáner: " + err.message);
+  }
+  syncHeight();
+}
+
+function restartScan() {
+  startScan();
+}
+
+function onDetected(result) {
+  if (!scanning || detectedCode) return;
+  scanning     = false;
+  detectedCode = result.getText();
+  detectedFmt  = formatName(result.getBarcodeFormat());
+
+  // Pausar escáner
+  try { codeReader.reset(); } catch(_){}
+
+  // Flash verde
+  const flash = document.getElementById("success-flash");
+  flash.style.display = "block";
+  setTimeout(() => { flash.style.display = "none"; }, 350);
+
+  // Beep
+  playBeep();
+
+  // Mostrar resultado
+  document.getElementById("rc-code-val").textContent = detectedCode;
+  document.getElementById("rc-type-val").textContent  = detectedFmt;
+  document.getElementById("result-card").style.display = "block";
+  document.getElementById("btn-confirm").style.display = "flex";
+  setStatus("✅ ¡Código detectado! Revisa y confirma.", "s-detected");
+  syncHeight();
+}
+
+function confirmBarcode() {
+  if (!detectedCode) return;
+  Streamlit.setComponentValue(detectedCode);
+  setStatus("📤 Código guardado. Pulsa «📥 Cargar código» en Streamlit.", "s-paused");
+  document.getElementById("btn-confirm").style.display = "none";
+}
+
+// ══════════════════════════════════════════════════════════
+//  Helpers
+// ══════════════════════════════════════════════════════════
+function setStatus(msg, cls) {
+  const el = document.getElementById("status-bar");
+  el.textContent = msg;
+  el.className   = cls;
+}
+
+function showError(msg) {
+  const el = document.getElementById("err-msg");
+  el.textContent     = msg;
+  el.style.display   = "block";
+  setStatus("❌ Error en el escáner", "s-error");
+  syncHeight();
+}
+
+const FMT_NAMES = {
+  0:"AZTEC",1:"CODABAR",2:"CODE-39",3:"CODE-93",4:"CODE-128",
+  5:"DATA MATRIX",6:"EAN-8",7:"EAN-13",8:"ITF",9:"MAXICODE",
+  10:"PDF-417",11:"QR CODE",12:"RSS-14",13:"RSS EXPANDED",
+  14:"UPC-A",15:"UPC-E",16:"UPC/EAN EXTENSION",
+};
+function formatName(fmt) { return FMT_NAMES[fmt] ?? "Código desconocido"; }
+
+function playBeep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "sine";
+    osc.frequency.value = 1050;
+    gain.gain.setValueAtTime(.35, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(.001, ctx.currentTime + .22);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + .22);
+  } catch(_) {}
+}
+
+// ══════════════════════════════════════════════════════════
+//  Mensajes de Streamlit → componente
+// ══════════════════════════════════════════════════════════
+window.addEventListener("message", (event) => {
+  if (event.data.type === "streamlit:render") {
+    // args disponibles en event.data.args si se necesitan
+    syncHeight();
+  }
+});
+
+// ── Arranque ──────────────────────────────────────────────
+window.addEventListener("load", () => {
+  Streamlit.ready();
+  syncHeight();
+  initCameras();
+});
+</script>
+</body>
+</html>

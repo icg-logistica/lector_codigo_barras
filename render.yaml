@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: lector-codigo-barras-icg
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
+    envVars:
+      - key: MONGODB_URI
+        sync: false          # se ingresa manualmente en el dashboard de Render
+      - key: DATABASE_NAME
+        value: lector_barcode
+      - key: COLLECTION_NAME
+        value: registros
+      - key: PYTHON_VERSION
+        value: "3.11.9"
