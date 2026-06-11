@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block content %}
+
+<!-- Alerta de conexión -->
+{% if not db_ok %}
+<div class="alert alert-error">❌ Sin conexión a MongoDB Atlas: {{ db_msg }}</div>
+{% endif %}
+
+<!-- Métricas -->
+<div class="metrics-row">
+  <div class="metric-card">
+    <div class="metric-value">{{ total }}</div>
+    <div class="metric-label">📦 Total registros</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-value">{{ today }}</div>
+    <div class="metric-label">📅 Escaneados hoy</div>
+  </div>
+</div>
+
+<!-- Layout principal -->
+<div class="scanner-layout">
+
+  <!-- Panel izquierdo: cámara -->
+  <div class="scanner-panel">
+    <h2 class="panel-title">📷 Escáner</h2>
+
+    <div class="video-box">
+      <video id="video" autoplay playsinline muted></video>
+      <div class="scan-line"></div>
+      <div class="corner tl"></div>
+      <div class="corner tr"></div>
+      <div class="corner bl"></div>
+      <div class="corner br"></div>
+      <div id="success-flash"></div>
+    </div>
+
+    <div class="scanner-controls">
+      <select id="cam-select" class="cam-select"></select>
+      <div id="scan-status" class="scan-status scanning">⏳ Iniciando cámara…</div>
+      <div id="scan-result" class="scan-result" hidden>
+        <span class="result-label">Código detectado:</span>
+        <span id="result-code" class="result-code"></span>
+        <span id="result-format" class="result-format"></span>
+      </div>
+      <button id="btn-rescan" class="btn btn-secondary" onclick="Scanner.restart()">🔄 Reiniciar</button>
+    </div>
+
+    <!-- Separador alternativa foto -->
+    <div class="divider"><span>o sube una imagen</span></div>
+    <label class="upload-label">
+      📁 Seleccionar imagen
+      <input type="file" id="img-upload" accept="image/*" capture="environment" hidden>
+    </label>
+  </div>
+
+  <!-- Panel derecho: info + formulario -->
+  <div class="form-panel">
+
+    <!-- Estado inicial -->
+    <div id="state-idle" class="state-card">
+      <div class="idle-icon">📦</div>
+      <p>Apunta la cámara a un código de barras o sube una foto para comenzar.</p>
+    </div>
+
+    <!-- Cargando info del producto -->
+    <div id="state-loading" class="state-card" hidden>
+      <div class="spinner"></div>
+      <p>Buscando información del producto…</p>
+    </div>
+
+    <!-- Info del producto + formulario -->
+    <div id="state-form" hidden>
+
+      <div id="product-found" class="product-card product-found" hidden>
+        <img id="product-img" src="" alt="" class="product-img" hidden>
+        <div class="product-source" id="product-source"></div>
+        <div class="product-name" id="product-name"></div>
+        <table class="product-table" id="product-table"></table>
+      </div>
+
+      <div id="product-notfound" class="product-card product-notfound" hidden>
+        <div class="notfound-icon">⚠️</div>
+        <div class="notfound-text">
+          Producto no encontrado en bases de datos externas.<br>
+          <small>Puedes escribir el nombre manualmente.</small>
+        </div>
+      </div>
+
+      <div id="tech-info" class="tech-card" hidden>
+        <div class="tech-title">🔢 Datos técnicos</div>
+        <table id="tech-table"></table>
+      </div>
+
+      <div id="duplicate-warn" class="alert alert-warn" hidden>
+        ⚠️ Este código ya existe en la base de datos.
+        <label class="dup-check">
+          <input type="checkbox" id="allow-dup"> Permitir duplicado
+        </label>
+      </div>
+
+      <div class="save-form">
+        <label class="form-label">Nombre del producto</label>
+        <input id="nombre-input" type="text" class="form-input" placeholder="Escribe o corrige el nombre…">
+
+        <label class="form-label">Peso (kg) *</label>
+        <input id="peso-input" type="number" class="form-input" placeholder="Ej: 1.250" step="0.001" min="0.001">
+
+        <div class="form-actions">
+          <button id="btn-save"  class="btn btn-primary"   onclick="saveRecord()">💾 Guardar</button>
+          <button id="btn-new"   class="btn btn-secondary" onclick="Scanner.restart()">🔄 Nuevo escaneo</button>
+        </div>
+      </div>
+
+    </div><!-- /state-form -->
+  </div><!-- /form-panel -->
+
+</div><!-- /scanner-layout -->
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/@zxing/library@0.19.1/umd/index.min.js"></script>
+<script src="{{ url_for('static', filename='js/scanner.js') }}"></script>
+{% endblock %}

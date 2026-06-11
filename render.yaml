@@ -3,7 +3,7 @@ services:
     name: lector-codigo-barras-icg
     runtime: python
     buildCommand: pip install --upgrade pip && pip install --prefer-binary -r requirements.txt
-    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
     envVars:
       - key: MONGODB_URI
         sync: false
