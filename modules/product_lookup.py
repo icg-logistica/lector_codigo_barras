@@ -34,17 +34,22 @@ def _query_open_food_facts(barcode: str) -> dict:
             or ""
         ).strip()
 
+        tags = [t for t in p.get("categories_tags", []) if t]
+        if tags:
+            categorias = tags[0].replace("en:", "").replace("-", " ").title()
+        else:
+            categorias = (p.get("categories", "") or "").split(",")[0].strip()
+
         return {
             "encontrado": True,
             "fuente": "Open Food Facts",
             "nombre": nombre,
-            "marca": p.get("brands", "").strip(),
-            "categorias": p.get("categories_tags", [None])[0].replace("en:", "").replace("-", " ").title()
-                          if p.get("categories_tags") else p.get("categories", "").split(",")[0].strip(),
-            "cantidad": p.get("quantity", "").strip(),
-            "paises_venta": p.get("countries", "").split(",")[0].strip(),
-            "imagen_url": p.get("image_front_url", ""),
-            "nutriscore": p.get("nutriscore_grade", "").upper() or None,
+            "marca": (p.get("brands") or "").strip(),
+            "categorias": categorias,
+            "cantidad": (p.get("quantity") or "").strip(),
+            "paises_venta": (p.get("countries") or "").split(",")[0].strip(),
+            "imagen_url": p.get("image_front_url") or "",
+            "nutriscore": (p.get("nutriscore_grade") or "").upper() or None,
         }
 
     except requests.RequestException as e:
