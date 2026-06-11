@@ -18,6 +18,7 @@
   <table class="records-table">
     <thead>
       <tr>
+        <th>Foto</th>
         <th>Código</th>
         <th>Nombre</th>
         <th>Tipo</th>
@@ -29,6 +30,15 @@
     <tbody>
       {% for r in records %}
       <tr>
+        <td>
+          {% if r.foto_url %}
+          <a href="{{ r.foto_url }}" target="_blank">
+            <img src="{{ r.foto_url }}" alt="foto" class="record-thumb">
+          </a>
+          {% else %}
+          <span class="text-muted">—</span>
+          {% endif %}
+        </td>
         <td><code>{{ r.codigo_barras }}</code></td>
         <td>
           {{ r.nombre_producto or '—' }}

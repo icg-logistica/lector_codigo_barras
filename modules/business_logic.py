@@ -37,6 +37,7 @@ def process_new_scan(
     raw_peso: str | float,
     allow_duplicate: bool = False,
     producto_info: dict | None = None,
+    foto_url: str = "",
 ) -> tuple[bool, str]:
     """
     Orquesta validación + guardado de un nuevo escaneo.
@@ -76,6 +77,7 @@ def process_new_scan(
         peso=peso,
         nombre_producto=nombre,
         producto_info=producto_info or {},
+        foto_url=foto_url,
     )
     return True, record_id
 

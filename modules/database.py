@@ -47,16 +47,19 @@ def _serialize(record: dict) -> dict:
 
 
 def insert_record(codigo_barras, informacion, peso,
-                  nombre_producto="", producto_info=None) -> str:
+                  nombre_producto="", producto_info=None, foto_url="") -> str:
     col = get_collection()
-    result = col.insert_one({
-        "codigo_barras": codigo_barras,
+    doc = {
+        "codigo_barras":   codigo_barras,
         "nombre_producto": nombre_producto,
-        "informacion": informacion,
-        "producto_api": producto_info or {},
-        "peso": peso,
-        "fecha_hora": datetime.now(),
-    })
+        "informacion":     informacion,
+        "producto_api":    producto_info or {},
+        "peso":            peso,
+        "fecha_hora":      datetime.now(),
+    }
+    if foto_url:
+        doc["foto_url"] = foto_url
+    result = col.insert_one(doc)
     return str(result.inserted_id)
 
 

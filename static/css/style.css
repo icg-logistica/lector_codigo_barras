@@ -407,6 +407,39 @@ code { font-family: 'Courier New', monospace; font-size: .9em; color: var(--acce
 .modal-title { font-size: 1.1rem; font-weight: 700; color: var(--accent); }
 .modal-actions { display: flex; gap: 8px; margin-top: 8px; }
 
+/* ── Foto del producto ───────────────────────────────────── */
+.photo-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.photo-pick-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border-radius: 7px; cursor: pointer;
+  background: var(--elevated); color: var(--text);
+  border: 1px dashed var(--border); font-size: .88rem;
+  transition: border-color .18s, color .18s;
+}
+.photo-pick-btn:hover { border-color: var(--primary); color: var(--accent); }
+
+#photo-preview-wrap {
+  display: flex; align-items: center; gap: 8px;
+}
+#photo-preview {
+  width: 64px; height: 64px; object-fit: cover;
+  border-radius: 6px; border: 1px solid var(--border);
+}
+.photo-status {
+  font-size: .82rem; color: var(--muted); padding: 4px 0;
+}
+.photo-status.uploading { color: #93c5fd; }
+.photo-status.done      { color: #86efac; }
+.photo-status.error     { color: #fca5a5; }
+
+/* Miniatura en tabla de registros */
+.record-thumb {
+  width: 48px; height: 48px; object-fit: cover;
+  border-radius: 5px; border: 1px solid var(--border);
+  display: block;
+}
+
 /* ── Toast ───────────────────────────────────────────────── */
 #toast-container {
   position: fixed; bottom: 24px; right: 24px;

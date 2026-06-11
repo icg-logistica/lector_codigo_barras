@@ -10,6 +10,7 @@ from modules.database import (
 from modules.business_logic import process_new_scan, process_edit
 from modules.product_lookup import lookup_product
 from modules.barcode_reader import extract_barcode_info, decode_from_image
+from modules.image_upload import upload_photo, is_configured as cloudinary_configured
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -57,6 +58,22 @@ def api_product(barcode):
     return jsonify({"product": product, "info": info, "duplicate": duplicate})
 
 
+@app.route("/api/upload-photo", methods=["POST"])
+def api_upload_photo():
+    """Sube una foto a Cloudinary y devuelve la URL."""
+    if not cloudinary_configured():
+        return jsonify({"success": False, "error": "Cloudinary no configurado"}), 503
+    if "photo" not in request.files:
+        return jsonify({"success": False, "error": "No se recibió imagen"}), 400
+    photo_bytes = request.files["photo"].read()
+    if not photo_bytes:
+        return jsonify({"success": False, "error": "Imagen vacía"}), 400
+    url = upload_photo(photo_bytes)
+    if url:
+        return jsonify({"success": True, "url": url})
+    return jsonify({"success": False, "error": "Error al subir la imagen"}), 500
+
+
 @app.route("/api/save", methods=["POST"])
 def api_save():
     """Guarda un nuevo registro."""
@@ -65,8 +82,8 @@ def api_save():
     peso_raw     = data.get("peso", "")
     producto_api = data.get("producto_api", {})
     allow_dup    = data.get("allow_duplicate", False)
+    foto_url     = data.get("foto_url", "")
 
-    # Aplicar nombre editado por el usuario
     nombre = data.get("nombre", "")
     if producto_api:
         producto_api["nombre"] = nombre
@@ -75,6 +92,7 @@ def api_save():
         barcode, peso_raw,
         allow_duplicate=allow_dup,
         producto_info=producto_api,
+        foto_url=foto_url,
     )
     if ok:
         return jsonify({"success": True, "id": result})

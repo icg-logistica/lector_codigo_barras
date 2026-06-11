@@ -4,12 +4,14 @@
 
 const Scanner = (() => {
   /* Estado */
-  let reader        = null;
+  let reader         = null;
   let selectedDevice = null;
-  let scanning      = true;
-  let lastBarcode   = null;
-  let currentProduct = null;   // datos del último producto buscado
-  let isDuplicate   = false;
+  let scanning       = true;
+  let lastBarcode    = null;
+  let currentProduct = null;
+  let isDuplicate    = false;
+  let pendingFotoUrl = "";      // URL Cloudinary subida antes de guardar
+  let pendingFotoFile = null;   // File pendiente de subir
 
   /* ── Elementos del DOM ─────────────────────────────────── */
   const video       = () => document.getElementById('video');
@@ -224,6 +226,61 @@ const Scanner = (() => {
     if (isDuplicate) show(dupWarn); else hide(dupWarn);
   }
 
+  /* ── Foto: inicializar input ────────────────────────────── */
+  function initPhotoInput() {
+    const input = document.getElementById('photo-input');
+    if (!input) return;
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      pendingFotoFile = file;
+      pendingFotoUrl  = "";  // resetear URL previa
+
+      // Mostrar preview local (sin subir aún)
+      const preview = document.getElementById('photo-preview');
+      const wrap    = document.getElementById('photo-preview-wrap');
+      if (preview && wrap) {
+        preview.src = URL.createObjectURL(file);
+        show(wrap);
+      }
+      setPhotoStatus('Foto lista para guardar', '');
+    });
+  }
+
+  function setPhotoStatus(msg, cls) {
+    const el = document.getElementById('photo-status');
+    if (!el) return;
+    if (!msg) { hide(el); return; }
+    el.textContent = msg;
+    el.className   = `photo-status ${cls}`;
+    show(el);
+  }
+
+  /* ── Foto: subir a Cloudinary ───────────────────────────── */
+  async function uploadPhotoIfPending() {
+    if (!pendingFotoFile) return "";
+    if (pendingFotoUrl)   return pendingFotoUrl;  // ya subida
+
+    setPhotoStatus('⏳ Subiendo foto…', 'uploading');
+    const fd = new FormData();
+    fd.append('photo', pendingFotoFile);
+    try {
+      const res  = await fetch('/api/upload-photo', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (data.success && data.url) {
+        pendingFotoUrl = data.url;
+        setPhotoStatus('✅ Foto subida', 'done');
+        return data.url;
+      }
+      // Cloudinary no configurado o error → continuar sin foto
+      setPhotoStatus('⚠️ Foto no subida (continúa sin ella)', 'error');
+      return "";
+    } catch {
+      setPhotoStatus('⚠️ Error al subir foto', 'error');
+      return "";
+    }
+  }
+
   /* ── Guardar registro ──────────────────────────────────── */
   async function saveRecord() {
     const nombre = (document.getElementById('nombre-input')?.value || '').trim();
@@ -239,6 +296,9 @@ const Scanner = (() => {
     if (btn) { btn.disabled = true; btn.textContent = '⏳ Guardando…'; }
 
     try {
+      // Subir foto primero si hay una pendiente
+      const fotoUrl = await uploadPhotoIfPending();
+
       const res = await fetch('/api/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -248,6 +308,7 @@ const Scanner = (() => {
           peso,
           producto_api:    currentProduct || {},
           allow_duplicate: allowD,
+          foto_url:        fotoUrl,
         }),
       });
       const data = await res.json();
@@ -300,13 +361,14 @@ const Scanner = (() => {
     setStatus('🟢 Escaneando…', 'scanning');
     showIdle();
 
-    /* Limpiar campos */
+    /* Limpiar campos y foto */
     const ni = document.getElementById('nombre-input');
     const pi = document.getElementById('peso-input');
     const ad = document.getElementById('allow-dup');
-    if (ni) ni.value  = '';
-    if (pi) pi.value  = '';
+    if (ni) ni.value   = '';
+    if (pi) pi.value   = '';
     if (ad) ad.checked = false;
+    clearPhoto();
   }
 
   /* ── Inicialización ────────────────────────────────────── */
@@ -327,16 +389,36 @@ const Scanner = (() => {
     }
 
     reader = new ZXing.BrowserMultiFormatReader();
-    // startCamera hace getUseMedia → pide permiso → después carga el selector de cámaras
     await startCamera(reader);
     initUpload();
+    initPhotoInput();
   }
 
   /* Arrancar cuando el DOM esté listo */
   document.addEventListener('DOMContentLoaded', init);
 
-  return { restart, saveRecord };
+  function _clearPhoto() {
+    pendingFotoFile = null;
+    pendingFotoUrl  = "";
+  }
+
+  return { restart, saveRecord, _clearPhoto };
 })();
 
-/* Exponer saveRecord en el scope global (usada por el onclick del HTML) */
+/* Funciones globales usadas por onclicks del HTML */
 function saveRecord() { Scanner.saveRecord(); }
+
+function clearPhoto() {
+  const input   = document.getElementById('photo-input');
+  const preview = document.getElementById('photo-preview');
+  const wrap    = document.getElementById('photo-preview-wrap');
+  const status  = document.getElementById('photo-status');
+
+  if (input)   input.value  = '';
+  if (preview) preview.src  = '';
+  if (wrap)    wrap.hidden  = true;
+  if (status)  status.hidden = true;
+
+  // Limpiar estado interno del módulo
+  if (typeof Scanner !== 'undefined') Scanner._clearPhoto?.();
+}
