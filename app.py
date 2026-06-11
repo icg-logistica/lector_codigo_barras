@@ -49,6 +49,15 @@ def records_page():
 
 # ── API ────────────────────────────────────────────────────────────────────────
 
+@app.route("/api/metrics")
+def api_metrics():
+    """Métricas rápidas para actualización en tiempo real."""
+    db_ok, _ = test_connection()
+    total = len(get_all_records()) if db_ok else 0
+    today = count_today() if db_ok else 0
+    return jsonify({"total": total, "today": today})
+
+
 @app.route("/api/product/<barcode>")
 def api_product(barcode):
     """Devuelve info del producto (API externa) + datos técnicos del código."""
