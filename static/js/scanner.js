@@ -49,30 +49,42 @@ const Scanner = (() => {
     fl.addEventListener('animationend', () => { fl.style.display = 'none'; fl.style.animation = ''; }, { once: true });
   }
 
-  /* ── Listar cámaras ────────────────────────────────────── */
+  /* ── Listar cámaras (llamar DESPUÉS de obtener permiso) ── */
   async function loadCameras(codeReader) {
     try {
       const devices = await codeReader.listVideoInputDevices();
       const sel = camSelect();
-      if (!sel) return;
+      if (!sel || !devices.length) return;
+
+      // Guardar selección actual antes de repoblar
+      const prev = sel.value;
       sel.innerHTML = '';
-      if (!devices.length) {
-        sel.innerHTML = '<option>Sin cámaras detectadas</option>';
-        return;
-      }
+      let backIdx = -1;
       devices.forEach((d, i) => {
         const opt = document.createElement('option');
         opt.value = d.deviceId;
         opt.text  = d.label || `Cámara ${i + 1}`;
-        // Preferir cámara trasera
-        if (/back|rear|environment/i.test(d.label)) opt.selected = true;
         sel.appendChild(opt);
+        if (/back|rear|environment/i.test(d.label)) backIdx = i;
       });
+
+      // Preferir cámara trasera; si ya había una seleccionada, mantenerla
+      if (prev && [...sel.options].some(o => o.value === prev)) {
+        sel.value = prev;
+      } else if (backIdx >= 0) {
+        sel.selectedIndex = backIdx;
+      }
       selectedDevice = sel.value;
-      sel.addEventListener('change', () => {
-        selectedDevice = sel.value;
-        startCamera(codeReader);
-      });
+
+      // Registrar listener de cambio solo una vez
+      if (!sel.dataset.listenerAdded) {
+        sel.dataset.listenerAdded = '1';
+        sel.addEventListener('change', () => {
+          selectedDevice = sel.value;
+          codeReader.reset();
+          startCamera(codeReader);
+        });
+      }
     } catch (err) {
       console.warn('No se pudo listar cámaras:', err);
     }
@@ -86,18 +98,35 @@ const Scanner = (() => {
       await codeReader.decodeFromVideoDevice(
         selectedDevice || undefined,
         video(),
-        (result, err) => {
+        (result, _err) => {
           if (!scanning) return;
           if (result) {
             onDetected(result.getText(), result.getBarcodeFormat().toString());
           }
-          // err es normal mientras no hay código en cuadro — ignorar
+          // _err ocurre en cada frame sin código — es normal, ignorar
         }
       );
       setStatus('🟢 Escaneando…', 'scanning');
+      // Poblar selector de cámaras ahora que el permiso fue concedido
+      await loadCameras(codeReader);
     } catch (err) {
       console.error('Error de cámara:', err);
-      setStatus('❌ Sin acceso a la cámara', 'error');
+      const name = err?.name || '';
+      if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        setStatus('❌ Permiso de cámara denegado', 'error');
+        showToast('Permite el acceso a la cámara en tu navegador y recarga la página.', 'warn', 7000);
+      } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+        setStatus('❌ No se encontró ninguna cámara', 'error');
+      } else if (name === 'NotReadableError' || name === 'TrackStartError') {
+        setStatus('❌ Cámara en uso por otra app', 'error');
+        showToast('Cierra otras apps que usen la cámara y recarga.', 'warn', 6000);
+      } else if (name === 'SecurityError' ||
+                 (location.protocol === 'http:' && location.hostname !== 'localhost')) {
+        setStatus('❌ Requiere conexión HTTPS', 'error');
+        showToast('La cámara solo funciona por HTTPS. Usa el botón de subir imagen.', 'warn', 8000);
+      } else {
+        setStatus(`❌ Error de cámara: ${err?.message || name || 'desconocido'}`, 'error');
+      }
     }
   }
 
@@ -283,11 +312,22 @@ const Scanner = (() => {
   /* ── Inicialización ────────────────────────────────────── */
   async function init() {
     if (typeof ZXing === 'undefined') {
-      setStatus('❌ Librería ZXing no disponible', 'error');
+      setStatus('❌ Librería ZXing no cargó', 'error');
+      showToast('No se pudo cargar ZXing. Revisa tu conexión.', 'error', 7000);
+      initUpload();
       return;
     }
+
+    // navigator.mediaDevices solo existe en contextos seguros (HTTPS o localhost)
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setStatus('❌ Cámara no disponible (requiere HTTPS)', 'error');
+      showToast('La cámara requiere HTTPS. Puedes usar el botón de subir imagen.', 'warn', 8000);
+      initUpload();
+      return;
+    }
+
     reader = new ZXing.BrowserMultiFormatReader();
-    await loadCameras(reader);
+    // startCamera hace getUseMedia → pide permiso → después carga el selector de cámaras
     await startCamera(reader);
     initUpload();
   }
