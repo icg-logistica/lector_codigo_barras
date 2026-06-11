@@ -14,6 +14,11 @@ _HEADERS = {"User-Agent": "ICG-Logistica/1.0 (contact@icg.com.mx)"}
 
 # ── Open Food Facts ────────────────────────────────────────────────────────────
 
+def _safe(val, default=""):
+    """Convierte cualquier valor a string limpio, evitando AttributeError con None."""
+    return str(val).strip() if val is not None else default
+
+
 def _query_open_food_facts(barcode: str) -> dict:
     try:
         url = f"https://world.openfoodfacts.org/api/v0/product/{barcode}.json"
@@ -26,35 +31,39 @@ def _query_open_food_facts(barcode: str) -> dict:
 
         p = data["product"]
 
-        nombre = (
+        nombre = _safe(
             p.get("product_name_es")
             or p.get("product_name_en")
             or p.get("product_name")
             or p.get("abbreviated_product_name")
-            or ""
-        ).strip()
+        )
 
-        tags = [t for t in p.get("categories_tags", []) if t]
+        tags = [t for t in (p.get("categories_tags") or []) if isinstance(t, str)]
         if tags:
             categorias = tags[0].replace("en:", "").replace("-", " ").title()
         else:
-            categorias = (p.get("categories", "") or "").split(",")[0].strip()
+            categorias = _safe(p.get("categories")).split(",")[0].strip()
+
+        countries_raw = _safe(p.get("countries"))
+        paises = countries_raw.split(",")[0].strip()
 
         return {
             "encontrado": True,
             "fuente": "Open Food Facts",
             "nombre": nombre,
-            "marca": (p.get("brands") or "").strip(),
+            "marca": _safe(p.get("brands")),
             "categorias": categorias,
-            "cantidad": (p.get("quantity") or "").strip(),
-            "paises_venta": (p.get("countries") or "").split(",")[0].strip(),
-            "imagen_url": p.get("image_front_url") or "",
-            "nutriscore": (p.get("nutriscore_grade") or "").upper() or None,
+            "cantidad": _safe(p.get("quantity")),
+            "paises_venta": paises,
+            "imagen_url": _safe(p.get("image_front_url")),
+            "nutriscore": _safe(p.get("nutriscore_grade")).upper() or None,
         }
 
     except requests.RequestException as e:
         return {"encontrado": False, "error": f"Open Food Facts: {e}"}
     except Exception as e:
+        import traceback
+        print(f"[product_lookup] ERROR Open Food Facts barcode={barcode}: {traceback.format_exc()}")
         return {"encontrado": False, "error": str(e)}
 
 
@@ -87,6 +96,8 @@ def _query_upc_item_db(barcode: str) -> dict:
     except requests.RequestException as e:
         return {"encontrado": False, "error": f"UPC Item DB: {e}"}
     except Exception as e:
+        import traceback
+        print(f"[product_lookup] ERROR UPC Item DB barcode={barcode}: {traceback.format_exc()}")
         return {"encontrado": False, "error": str(e)}
 
 
